@@ -10,14 +10,11 @@
 #define DRV_EXTRAVERSION ""
 #define DRV_VERSION "0.1" DRV_EXTRAVERSION
 
-char afad_driver_name[] = "afapci";
+char afad_driver_name[] = "minipci";
 const char afad_driver_version[] = DRV_VERSION;
 
 // =======================================================================================================
-// prefix "AFAD" stands for "AFA Driver",
-// which in turn stands for "ASPECT FPGA Accelerator Driver",
-// which in turn stands for "A SPEctra Clustering Tool FPGA Accelerator Driver",
-// which in turn stands for "A SPEctra Clustering Tool Field Programmable Gate Array Accelerator Driver"
+// prefix "MPD" stands for "Mini PCI Driver",
 // =======================================================================================================
 
 typedef struct
@@ -25,7 +22,7 @@ typedef struct
 	void __iomem *barHWAddress;
 	unsigned long barFlags;
 	char barValid;
-} AFAD_BAR_t;
+} MPD_BAR_t;
 
 // here we collect all relevant data of the driver at one place
 typedef struct
@@ -34,27 +31,27 @@ typedef struct
 	char *bufferWrite;
 	struct class *driverClass;
 	struct device *driverDevice;
-	AFAD_BAR_t bars[ 6 ];
+	MPD_BAR_t bars[ 6 ];
 	struct cdev charDev;
 	int irq;
 	int numDevices;
 	int driverMajor;
 	int driverMinor;
 	int deviceOpen;
-} AFAD_WorkData_t;
+} MPD_WorkData_t;
 
-static AFAD_WorkData_t AFAD_AdapterBoard;
-//static struct cdev AFAD_cdev;
-//static struct class *AFAD_class;
+static MPD_WorkData_t MPD_AdapterBoard;
+//static struct cdev MPD_cdev;
+//static struct class *MPD_class;
 
 // =======================================================================================================
 //
-// AFAD device functions
+// MPD device functions
 //
 // =======================================================================================================
 
 static ssize_t
-AFAD_read(
+MPD_read(
 	struct file *filp,
 	char *buffer,
 	size_t bufferSize,
@@ -63,13 +60,13 @@ AFAD_read(
 	unsigned long unusedBytes;
 
 	printk( "read: 0x%p [%ld, 0x%8.8lx]\n", buffer, bufferSize, bufferSize );
-	unusedBytes = copy_to_user( ( void * ) buffer, AFAD_AdapterBoard.bars[ 0 ].barHWAddress, bufferSize );
+	unusedBytes = copy_to_user( ( void * ) buffer, MPD_AdapterBoard.bars[ 0 ].barHWAddress, bufferSize );
 	printk( "read: %ld [%ld]\n", bufferSize, unusedBytes );
 	return 0;
 }
 
 static ssize_t
-AFAD_write(
+MPD_write(
 	struct file *filp,
 	const char *buffer,
 	size_t bufferSize,
@@ -77,40 +74,40 @@ AFAD_write(
 {
 	unsigned long unusedBytes;
 	printk( "write: 0x%p [%ld, 0x%8.8lx]\n", buffer, bufferSize, bufferSize );
-	unusedBytes = copy_from_user( AFAD_AdapterBoard.bars[ 0 ].barHWAddress, ( void * ) buffer, bufferSize );
+	unusedBytes = copy_from_user( MPD_AdapterBoard.bars[ 0 ].barHWAddress, ( void * ) buffer, bufferSize );
 	printk( "write: %ld [%ld]\n", bufferSize, unusedBytes );
 	return 0;
 }
 
 static int
-AFAD_open(
+MPD_open(
 	struct inode *inode,
 	struct file *file )
 {
 	printk( "open ...\n" );
-	if ( AFAD_AdapterBoard.deviceOpen )
+	if ( MPD_AdapterBoard.deviceOpen )
 	{
 		printk( "open: already open\n" );
 		return -EBUSY;
 	}
-	AFAD_AdapterBoard.deviceOpen++;
+	MPD_AdapterBoard.deviceOpen++;
 	try_module_get( THIS_MODULE );
 	printk( "open\n" );
 	return 0;	// success
 }
 
 static int
-AFAD_release(
+MPD_release(
 	struct inode *inode,
 	struct file *file )
 {
 	printk( "close ...\n" );
-	if ( 0 == AFAD_AdapterBoard.deviceOpen )
+	if ( 0 == MPD_AdapterBoard.deviceOpen )
 	{
 		printk( "release: not open\n" );
 		return -EBUSY;
 	}
-	AFAD_AdapterBoard.deviceOpen--;
+	MPD_AdapterBoard.deviceOpen--;
 
 	module_put( THIS_MODULE );
 
@@ -119,22 +116,22 @@ AFAD_release(
 }
 
 
-struct file_operations AFAD_fops =
+struct file_operations MPD_fops =
 {
 	.owner   = THIS_MODULE,
-	.read    = AFAD_read,
-	.write   = AFAD_write,
-	.open    = AFAD_open,
-	.release = AFAD_release,	//close
+	.read    = MPD_read,
+	.write   = MPD_write,
+	.open    = MPD_open,
+	.release = MPD_release,	//close
 };
 
 // =======================================================================================================
 //
-// AFAD management functions
+// MPD management functions
 //
 // =======================================================================================================
 static int
-AFAD_probe(
+MPD_probe(
 	struct pci_dev *pdev,
 	const struct pci_device_id *pdev_id )
 {
@@ -144,7 +141,7 @@ AFAD_probe(
 	unsigned long mmioLen;
 	struct device *dev = &pdev->dev;
 
-	printk(KERN_INFO "AFAD_probe: driver init: %s (enter) ==================\n", afad_driver_name );
+	printk(KERN_INFO "MPD_probe: driver init: %s (enter) ==================\n", afad_driver_name );
 	do
 	{
 		err = pci_enable_device( pdev );
@@ -155,80 +152,80 @@ AFAD_probe(
 			return err;
 		}
 
-		for ( i = 0; i < sizeof( AFAD_AdapterBoard.bars ) / sizeof( AFAD_BAR_t ); ++i )
+		for ( i = 0; i < sizeof( MPD_AdapterBoard.bars ) / sizeof( MPD_BAR_t ); ++i )
 		{
 printk( "BAR#%ld:\n", i );
-			AFAD_AdapterBoard.bars[ i ].barValid = 0;
+			MPD_AdapterBoard.bars[ i ].barValid = 0;
 			mmioStart = pci_resource_start( pdev, i );
 			mmioLen   = pci_resource_len( pdev, i );
 printk( "Start: [0x%8.8lx] %lu\n", mmioStart, mmioStart );
 printk( "Len:   [0x%8.8lx] %lu\n", mmioLen, mmioLen );
-			AFAD_AdapterBoard.bars[ i ].barHWAddress = pci_iomap( pdev, i, mmioLen );
+			MPD_AdapterBoard.bars[ i ].barHWAddress = pci_iomap( pdev, i, mmioLen );
 //ioremap( mmioStart, mmioLen );
-printk( "Addr:  [0x%p]\n", AFAD_AdapterBoard.bars[ i ].barHWAddress );
-			AFAD_AdapterBoard.bars[ i ].barFlags = pci_resource_flags( pdev, i );
-printk( "Flags: [0x%8.8lx] %lu\n", AFAD_AdapterBoard.bars[ i ].barFlags, AFAD_AdapterBoard.bars[ i ].barFlags );
-			if ( NULL != AFAD_AdapterBoard.bars[ i ].barHWAddress )
+printk( "Addr:  [0x%p]\n", MPD_AdapterBoard.bars[ i ].barHWAddress );
+			MPD_AdapterBoard.bars[ i ].barFlags = pci_resource_flags( pdev, i );
+printk( "Flags: [0x%8.8lx] %lu\n", MPD_AdapterBoard.bars[ i ].barFlags, MPD_AdapterBoard.bars[ i ].barFlags );
+			if ( NULL != MPD_AdapterBoard.bars[ i ].barHWAddress )
 			{
-				AFAD_AdapterBoard.bars[ i ].barValid = 1;
+				MPD_AdapterBoard.bars[ i ].barValid = 1;
 			}
 		}
 		err = pci_request_regions( pdev, DEV_DRIVER_NAME );
 	} while ( 0 );
 
-	printk(KERN_INFO "AFAD_probe: driver init: %s (exit) ===================\n", afad_driver_name );
+	printk(KERN_INFO "MPD_probe: driver init: %s (exit) ===================\n", afad_driver_name );
 	return err;
 }
 
-static void AFAD_remove(
+static void MPD_remove(
 	struct pci_dev *pdev )
 {
 	unsigned long i;
-	printk(KERN_INFO "AFAD_remove: driver remove: %s (enter) ===============\n", afad_driver_name );
+	printk(KERN_INFO "MPD_remove: driver remove: %s (enter) ===============\n", afad_driver_name );
 //	free_irq( pdev->irq, xxx );
-	for ( i = 0; i < sizeof( AFAD_AdapterBoard.bars ) / sizeof( AFAD_BAR_t ); ++i )
+	for ( i = 0; i < sizeof( MPD_AdapterBoard.bars ) / sizeof( MPD_BAR_t ); ++i )
 	{
-		if ( AFAD_AdapterBoard.bars[ i ].barValid )
+		if ( MPD_AdapterBoard.bars[ i ].barValid )
 		{
-			pci_iounmap( pdev, AFAD_AdapterBoard.bars[ i ].barHWAddress );
-			AFAD_AdapterBoard.bars[ i ].barValid = 0;
+			pci_iounmap( pdev, MPD_AdapterBoard.bars[ i ].barHWAddress );
+			MPD_AdapterBoard.bars[ i ].barValid = 0;
 		}
 	}
 	pci_release_regions( pdev );
 	pci_disable_device( pdev );
-	printk(KERN_INFO "AFAD_remove: driver remove: %s (exit) ================\n", afad_driver_name );
+	printk(KERN_INFO "MPD_remove: driver remove: %s (exit) ================\n", afad_driver_name );
 }
 
-static void AFAD_shutdown(
-	struct pci_dev * pdev )
+static void MPD_shutdown(
+	struct pci_dev *pdev )
 {
-	printk(KERN_INFO "AFAD_shutdown: driver shutdown: %s ===================\n", afad_driver_name );
+	printk(KERN_INFO "MPD_shutdown: driver shutdown: %s ===================\n", afad_driver_name );
 }
 
 // =======================================================================================================
 
 static struct pci_device_id
-	AFAD_id_table[] =
+	MPD_id_table[] =
 	{
 		{ 0x10ee, 0x7038, PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0 },
 		{ 0 },
 	};
 
 static struct pci_driver
-	AFAD_pci_driver_struct =
+	MPD_pci_driver_struct =
 	{
 		.name = afad_driver_name,
-		.id_table = AFAD_id_table,
-		.probe = AFAD_probe,
-		.remove = AFAD_remove,
-		.shutdown = AFAD_shutdown,
-//.err_handler = &AFAD_err_handler
+		.id_table = MPD_id_table,
+		.probe = MPD_probe,
+		.remove = MPD_remove,
+		.shutdown = MPD_shutdown,
+//.err_handler = &MPD_err_handler
 	};
 
 // -------------------------------------------------------------------------------------------------------
 
 static int __init
-AFAD_init(void)
+MPD_init(void)
 {
 	int rv = 0;		// return value
 	int err = 0;		// no error
@@ -239,18 +236,18 @@ AFAD_init(void)
 
 	do
 	{
-		printk(KERN_INFO "AFAD_init: driver start: %s (enter) ==================\n", afad_driver_name );
+		printk(KERN_INFO "MPD_init: driver start: %s (enter) ==================\n", afad_driver_name );
 
 		// clean memory "because you can never be too clean" ...
 		stage++;
 		// 1
-		memset( &AFAD_AdapterBoard, 0x00, sizeof( AFAD_WorkData_t ));
+		memset( &MPD_AdapterBoard, 0x00, sizeof( MPD_WorkData_t ));
 
 		// set config data - maybe by parameters from user
 		stage++;
 		// 2
-		AFAD_AdapterBoard.driverMinor = 0;	// user settable
-		AFAD_AdapterBoard.numDevices = 1;	// user settable
+		MPD_AdapterBoard.driverMinor = 0;	// user settable
+		MPD_AdapterBoard.numDevices = 1;	// user settable
 
 		// let the system give us a major number
 		stage++;
@@ -258,11 +255,11 @@ AFAD_init(void)
 		majorDev = MKDEV(
 			0,
 			0 );
-		printk(KERN_INFO "AFAD_init: alloc_chrdev_region\n" );
+		printk(KERN_INFO "MPD_init: alloc_chrdev_region\n" );
 		rv = alloc_chrdev_region(
 			&majorDev,
 			0,
-			AFAD_AdapterBoard.numDevices,
+			MPD_AdapterBoard.numDevices,
 			afad_driver_name );
 		if ( 0 > rv )
 		{
@@ -271,21 +268,21 @@ AFAD_init(void)
 			err = 1;
 			break;
 		}
-		AFAD_AdapterBoard.driverMajor = MAJOR( majorDev );
+		MPD_AdapterBoard.driverMajor = MAJOR( majorDev );
 
 		// initialize fops
 		stage++;
 		// 4
-		printk(KERN_INFO "AFAD_init: cdev_init\n" );
-		cdev_init( &AFAD_AdapterBoard.charDev, &AFAD_fops );
-		AFAD_AdapterBoard.charDev.owner = THIS_MODULE;
+		printk(KERN_INFO "MPD_init: cdev_init\n" );
+		cdev_init( &MPD_AdapterBoard.charDev, &MPD_fops );
+		MPD_AdapterBoard.charDev.owner = THIS_MODULE;
 
 		// apply major and minor number to character device
 		stage++;
 		// 5
-		devt = MKDEV( AFAD_AdapterBoard.driverMajor, AFAD_AdapterBoard.driverMinor );
-		printk(KERN_INFO "AFAD_init: cdev_add\n" );
-		rv = cdev_add( &AFAD_AdapterBoard.charDev, devt, 1 );
+		devt = MKDEV( MPD_AdapterBoard.driverMajor, MPD_AdapterBoard.driverMinor );
+		printk(KERN_INFO "MPD_init: cdev_add\n" );
+		rv = cdev_add( &MPD_AdapterBoard.charDev, devt, 1 );
 		if ( rv )
 		{
 			pr_err( "cdev_add error\n" );
@@ -297,9 +294,9 @@ AFAD_init(void)
 		// create sysfs entries
 		stage++;
 		// 6
-		printk(KERN_INFO "AFAD_init: class_create\n" );
-		AFAD_AdapterBoard.driverClass = class_create( THIS_MODULE, afad_driver_name );
-		if ( NULL == AFAD_AdapterBoard.driverClass )
+		printk(KERN_INFO "MPD_init: class_create\n" );
+		MPD_AdapterBoard.driverClass = class_create( THIS_MODULE, afad_driver_name );
+		if ( NULL == MPD_AdapterBoard.driverClass )
 		{
 			pr_err( "class_create error\n" );
 			// here we end up having an error
@@ -311,15 +308,15 @@ AFAD_init(void)
 		stage++;
 		// 7
 		sprintf( name, "%s%%d", afad_driver_name );	// construct "<name>i%d"
-		printk(KERN_INFO "AFAD_init: device_create\n" );
-		AFAD_AdapterBoard.driverDevice = device_create(
-			AFAD_AdapterBoard.driverClass,
+		printk(KERN_INFO "MPD_init: device_create\n" );
+		MPD_AdapterBoard.driverDevice = device_create(
+			MPD_AdapterBoard.driverClass,
 			NULL,
 			devt,
 			NULL,
 			name,
-			AFAD_AdapterBoard.driverMinor );
-		if ( NULL == AFAD_AdapterBoard.driverDevice )
+			MPD_AdapterBoard.driverMinor );
+		if ( NULL == MPD_AdapterBoard.driverDevice )
 		{
 			pr_err( "device_create error\n" );
 			// here we end up having an error
@@ -330,9 +327,9 @@ AFAD_init(void)
 		// register pci device driver
 		stage++;
 		// 8
-		printk(KERN_INFO "AFAD_init: register_driver\n" );
+		printk(KERN_INFO "MPD_init: register_driver\n" );
 		rv = pci_register_driver(
-			&AFAD_pci_driver_struct );
+			&MPD_pci_driver_struct );
 		if ( 0 > rv )
 		{
 			pr_err( "pci_register_driver error\n" );
@@ -342,7 +339,7 @@ AFAD_init(void)
 		}
 
 		// success - fall out of pseudo-loop
-		printk(KERN_INFO "AFAD_init: driver Major, Minor = %d, %d\n", AFAD_AdapterBoard.driverMajor, AFAD_AdapterBoard.driverMinor );
+		printk(KERN_INFO "MPD_init: driver Major, Minor = %d, %d\n", MPD_AdapterBoard.driverMajor, MPD_AdapterBoard.driverMinor );
 	} while ( 0 );
 
 	if ( err )
@@ -353,20 +350,20 @@ AFAD_init(void)
 			case 8:
 			{
 				device_destroy(
-					AFAD_AdapterBoard.driverClass,
-					MKDEV( AFAD_AdapterBoard.driverMajor, AFAD_AdapterBoard.driverMinor ));
+					MPD_AdapterBoard.driverClass,
+					MKDEV( MPD_AdapterBoard.driverMajor, MPD_AdapterBoard.driverMinor ));
 				// fall through
 			}
 			case 7:
 			{
 				class_destroy(
-					AFAD_AdapterBoard.driverClass );
+					MPD_AdapterBoard.driverClass );
 				// fall through
 			}
 			case 6:
 			{
 				cdev_del(
-					&AFAD_AdapterBoard.charDev );
+					&MPD_AdapterBoard.charDev );
 				// fall through
 			}
 			case 5:
@@ -374,8 +371,8 @@ AFAD_init(void)
 			{
 				// unregister device
 				unregister_chrdev_region(
-					MKDEV( AFAD_AdapterBoard.driverMajor, AFAD_AdapterBoard.driverMinor ),
-					AFAD_AdapterBoard.numDevices );
+					MKDEV( MPD_AdapterBoard.driverMajor, MPD_AdapterBoard.driverMinor ),
+					MPD_AdapterBoard.numDevices );
 				err = -stage;
 				break;
 			}
@@ -390,38 +387,38 @@ AFAD_init(void)
 		}
 	}
 
-	printk(KERN_INFO "AFAD_init: driver start: %s (exit) ===================\n", afad_driver_name );
+	printk(KERN_INFO "MPD_init: driver start: %s (exit) ===================\n", afad_driver_name );
 	return err;
 }
-module_init( AFAD_init );
+module_init( MPD_init );
 
 /*
- * AFAD_exit - Driver cleanup Routine
+ * MPD_exit - Driver cleanup Routine
  *
  * This is called just before the driver is removed from memory
  **/
 static void __exit
-AFAD_exit(void)
+MPD_exit(void)
 {
-	printk(KERN_INFO "AFAD_exit: driver shutdown: %s (enter) ===============\n", afad_driver_name );
+	printk(KERN_INFO "MPD_exit: driver shutdown: %s (enter) ===============\n", afad_driver_name );
 	pci_unregister_driver(
-		&AFAD_pci_driver_struct );
+		&MPD_pci_driver_struct );
 	device_destroy(
-		AFAD_AdapterBoard.driverClass,
-		MKDEV( AFAD_AdapterBoard.driverMajor, AFAD_AdapterBoard.driverMinor ));
+		MPD_AdapterBoard.driverClass,
+		MKDEV( MPD_AdapterBoard.driverMajor, MPD_AdapterBoard.driverMinor ));
 	class_destroy(
-		AFAD_AdapterBoard.driverClass );
+		MPD_AdapterBoard.driverClass );
 	cdev_del(
-		&AFAD_AdapterBoard.charDev );
+		&MPD_AdapterBoard.charDev );
 	unregister_chrdev_region(
-		MKDEV( AFAD_AdapterBoard.driverMajor, AFAD_AdapterBoard.driverMinor ),
-		AFAD_AdapterBoard.numDevices );
-	printk(KERN_INFO "AFAD_exit: driver shutdown: %s (exit) ================\n", afad_driver_name );
+		MKDEV( MPD_AdapterBoard.driverMajor, MPD_AdapterBoard.driverMinor ),
+		MPD_AdapterBoard.numDevices );
+	printk(KERN_INFO "MPD_exit: driver shutdown: %s (exit) ================\n", afad_driver_name );
 }
-module_exit( AFAD_exit );
+module_exit( MPD_exit );
 
-MODULE_AUTHOR( "Systemberatung Schwarzer, Jesko Schwarzer, <afa@schwarzers.de>" );
+MODULE_AUTHOR( "Systemberatung Schwarzer, Jesko Schwarzer, <minipci@schwarzers.de>" );
 MODULE_LICENSE( "GPL" );
-MODULE_DESCRIPTION( "Systemberatung Schwarzer (C) 2016/09 AFA Driver for VC709 board from Xilinx" );
+MODULE_DESCRIPTION( "Systemberatung Schwarzer (C) 2016/09 Driver for VC709 board from Xilinx" );
 MODULE_VERSION( DRV_VERSION );
 

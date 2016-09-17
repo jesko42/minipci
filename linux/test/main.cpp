@@ -23,7 +23,7 @@ int main()
 	unsigned char *c;
 
 	printf( "* open file\n" );
-	fileHandle = open( "/dev/afapci0", O_RDWR );
+	fileHandle = open( "/dev/minipci0", O_RDWR );
 	if ( fileHandle < 0 )
 	{
 		printf( "Device cannot be opened\n" );
