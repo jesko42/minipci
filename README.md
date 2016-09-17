@@ -1,4 +1,5 @@
-# minipci 17-Sep-2016
+* minipci 17-Sep-2016 *
+=======================
 
 Here I develop a generic PCIe driver. Idea was based on the lack of a usable driver with the Xilinx VC709 board.
 
@@ -8,7 +9,9 @@ Here I develop a generic PCIe driver. Idea was based on the lack of a usable dri
 >>> I cannot help you in case of problems as I have no time for it
 >>> Asking is always an option, but don't wonder to get NO response!
 
-My paradigmas:
+* My paradigmas:*
+-----------------
+
 * I (try to) develop portable code
 * I dislike warnings
 * Code should be easy to understand
