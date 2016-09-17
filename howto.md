@@ -1,3 +1,5 @@
+MiniPCI
+
 This is the Howto of the driver.
 
 I write this for the absolute beginners to ensure they can handle it. If someone is so smart
@@ -23,40 +25,53 @@ github@schwarzers.de
 ==> Open another terminal (here we name it terminal#2)
 
 ==> In terminal#1
+```
 cd ~
 mkdir git
 cd git
 git clone https://github.com/jesko42/minipci.git
+```
 
 * Make the driver *
 ===================
 
 ==> as a normal user (not root)
+
+```
 cd ~/git/linux/driver
 make
+```
 
-* Show kernel messages
-======================
+* Show kernel messages *
+========================
 
 ==> kernel messages are shown with 'dmesg', we enhance that by updating
 ==> the output whenever something changes
 
 ==> In terminal#2
+```
 dmesg -wH
+```
 
 * Start the driver *
 ====================
 
 ==> In terminal#1
+```
 cd ~/git/linux/driver
+```
 
 ==> We switch now to root, some people prefere the sudo command. It's up to you.
+```
 su
 insmod minipci.ko
+```
 
 ==> you should see the messages from minipci in terminal#2
 
+```
 exit
+```
 
 ==> now you are a normal user again
 
@@ -65,12 +80,16 @@ exit
 
 ==> In terminal#1
 ==> as a normal user (not root)
+```
 cd ~/git/linux/test
 make
+```
 
 ==> start
 
+```
 ./minipcitest
+```
 
 ==> For now (may change later) it opens up the driver,
 ==> accesses the BAR0 (Basic Address Range 0), write 16MB and
@@ -81,12 +100,16 @@ make
 =====================
 
 ==> In terminal#1
+```
 cd ~/git/linux/driver
+```
 
 ==> We switch now to root, some people prefere the sudo command. It's up to you.
+```
 su
 rmmod minipci
 exit
+```
 
 * Ready *
 =========
