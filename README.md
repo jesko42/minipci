@@ -1,6 +1,7 @@
 # minipci 17-Sep-2016
 
-Here I develop a generic PCIe driver. Idea was based on the lack of a usable driver with the Xilinx VC709 board.
+Here I develop a generic PCIe driver. Idea was based on the lack of a usable driver with the Xilinx VC709 board.<br>
+**Important to say: It works with kernel 4.6.7 ...**
 
 * The driver should help to start own developments.
 * It is planned to develop a Windows Version too. But this may take time.
