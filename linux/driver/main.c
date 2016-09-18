@@ -13,6 +13,13 @@
 char afad_driver_name[] = "minipci";
 const char afad_driver_version[] = DRV_VERSION;
 
+static struct pci_device_id
+	MPD_id_table[] =
+	{
+		{ 0x10ee, 0x7038, PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0 },
+		{ 0 },
+	};
+
 // =======================================================================================================
 // prefix "MPD" stands for "Mini PCI Driver",
 // =======================================================================================================
@@ -41,8 +48,6 @@ typedef struct
 } MPD_WorkData_t;
 
 static MPD_WorkData_t MPD_AdapterBoard;
-//static struct cdev MPD_cdev;
-//static struct class *MPD_class;
 
 // =======================================================================================================
 //
@@ -177,7 +182,8 @@ printk( "Flags: [0x%8.8lx] %lu\n", MPD_AdapterBoard.bars[ i ].barFlags, MPD_Adap
 	return err;
 }
 
-static void MPD_remove(
+static void
+MPD_remove(
 	struct pci_dev *pdev )
 {
 	unsigned long i;
@@ -196,20 +202,14 @@ static void MPD_remove(
 	printk(KERN_INFO "MPD_remove: driver remove: %s (exit) ================\n", afad_driver_name );
 }
 
-static void MPD_shutdown(
+static void
+MPD_shutdown(
 	struct pci_dev *pdev )
 {
 	printk(KERN_INFO "MPD_shutdown: driver shutdown: %s ===================\n", afad_driver_name );
 }
 
 // =======================================================================================================
-
-static struct pci_device_id
-	MPD_id_table[] =
-	{
-		{ 0x10ee, 0x7038, PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0 },
-		{ 0 },
-	};
 
 static struct pci_driver
 	MPD_pci_driver_struct =
