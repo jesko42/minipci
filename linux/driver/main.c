@@ -27,6 +27,8 @@ static struct pci_device_id
 typedef struct
 {
 	void __iomem *barHWAddress;
+	unsigned long mmioStart;
+	unsigned long barSizeInBytes;
 	unsigned long barFlags;
 	char barValid;
 } MPD_BAR_t;
@@ -63,10 +65,18 @@ MPD_read(
 	loff_t *offset )
 {
 	unsigned long unusedBytes;
+	phys_addr_t pa;
 
 	printk( "read: 0x%p [%ld, 0x%8.8lx]\n", buffer, bufferSize, bufferSize );
 	unusedBytes = copy_to_user( ( void * ) buffer, MPD_AdapterBoard.bars[ 0 ].barHWAddress, bufferSize );
 	printk( "read: %ld [%ld]\n", bufferSize, unusedBytes );
+
+//phys_addr_t virt_to_phys( volatile void *address );
+//void *      phys_to_virt( phys_addr_t    address );
+
+	pa = virt_to_phys( buffer );
+	printk( "read: pysical address of user buffer: 0x%16.16llx\n", pa );
+
 	return 0;
 }
 
@@ -83,6 +93,45 @@ MPD_write(
 	printk( "write: %ld [%ld]\n", bufferSize, unusedBytes );
 	return 0;
 }
+
+static int
+MPD_mmap(
+	struct file *filp,
+	struct vm_area_struct *vma )
+{
+        unsigned long offset;
+
+	printk( "mmap: vm_start: 0x%8.8lx, vm_end: 0x%8.8lx, vm_pgoff: 0x%8.8lx\n", vma->vm_start, vma->vm_end, vma->vm_pgoff );
+
+	offset = vma->vm_pgoff << PAGE_SHIFT;
+        if (( offset + ( vma->vm_end - vma->vm_start )) > MPD_AdapterBoard.bars[ 0 ].barSizeInBytes )
+	{
+                return -EINVAL;
+	}
+
+        offset += (unsigned long) MPD_AdapterBoard.bars[ 0 ].mmioStart;
+
+        vma->vm_page_prot = pgprot_noncached( vma->vm_page_prot );
+
+        if ( io_remap_pfn_range(vma, vma->vm_start, offset >> PAGE_SHIFT, vma->vm_end - vma->vm_start, vma->vm_page_prot ))
+	{
+                return -EAGAIN;
+	}
+        return 0;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 static int
 MPD_open(
@@ -126,6 +175,7 @@ struct file_operations MPD_fops =
 	.owner   = THIS_MODULE,
 	.read    = MPD_read,
 	.write   = MPD_write,
+	.mmap    = MPD_mmap,
 	.open    = MPD_open,
 	.release = MPD_release,	//close
 };
@@ -166,6 +216,8 @@ printk( "BAR#%ld:\n", i );
 printk( "Start: [0x%8.8lx] %lu\n", mmioStart, mmioStart );
 printk( "Len:   [0x%8.8lx] %lu\n", mmioLen, mmioLen );
 			MPD_AdapterBoard.bars[ i ].barHWAddress = pci_iomap( pdev, i, mmioLen );
+			MPD_AdapterBoard.bars[ i ].mmioStart = mmioStart;
+			MPD_AdapterBoard.bars[ i ].barSizeInBytes = mmioLen;
 //ioremap( mmioStart, mmioLen );
 printk( "Addr:  [0x%p]\n", MPD_AdapterBoard.bars[ i ].barHWAddress );
 			MPD_AdapterBoard.bars[ i ].barFlags = pci_resource_flags( pdev, i );

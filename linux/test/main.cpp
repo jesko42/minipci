@@ -10,6 +10,7 @@
 #include <sys/types.h>
 #include <sys/time.h>
 #include <sys/ioctl.h>
+#include <sys/mman.h>
 
 int main()
 {
@@ -17,7 +18,8 @@ int main()
 	int fileHandle = -1;
 	void *bufferSrc = NULL;
 	void *bufferDst = NULL;
-	unsigned long sizeTest = 16 * 1024 * 1024;
+	void *bufferDev = NULL;
+	unsigned long sizeTest = 256 * 1024 * 1024;
 	unsigned long ii, jj;
 	unsigned long *p;
 	unsigned char *c;
@@ -52,6 +54,20 @@ int main()
 		c[ ii ] = ( unsigned char )ii;
 	}
 
+#if 1
+	printf( "* map memory\n" );
+	bufferDev = mmap( 0, sizeTest, PROT_WRITE, MAP_SHARED, fileHandle, 0 );
+	if ( MAP_FAILED == bufferDev )
+	{
+		printf( "Mmap failed\n" );
+		exit( -1 );
+	}
+	printf( "* write hardware\n" );
+	memcpy( bufferDev, bufferSrc, sizeTest );
+
+	printf( "* read hardware\n" );
+	memcpy( bufferDst, bufferDev, sizeTest );
+#else
 	printf( "* write hardware\n" );
         rc = write( fileHandle, bufferSrc, sizeTest );
 	printf( "  - rc = %ld (should be zero)\n", rc );	// hmmm: ~16MB/s
@@ -59,11 +75,12 @@ int main()
 	printf( "* read hardware\n" );
         rc = read( fileHandle, bufferDst, sizeTest );		// hmmm: ~1MB/s
 	printf( "  - rc = %ld (should be zero)\n", rc );
-
+#endif
 	printf( "* compare data\n" );
 	rc = memcmp( bufferSrc, bufferDst, sizeTest );
 	printf( "  - rc = %ld (should be zero)\n", rc );
 
+#if 0
 	c = ( unsigned char * )bufferDst;
 	for ( ii = 1 * 1024 * 1024; ii < ( 1 * 1024 * 1024 + 64 * 1024 ); ii += 16 )
 	{
@@ -74,7 +91,7 @@ int main()
 		}
 		printf( "\n" );
 	}
-
+#endif
 
 	printf( "* free memory\n" );
 	free( bufferSrc );
