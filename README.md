@@ -1,16 +1,14 @@
-* minipci 17-Sep-2016 *
-=======================
+# minipci 17-Sep-2016
 
 Here I develop a generic PCIe driver. Idea was based on the lack of a usable driver with the Xilinx VC709 board.
 
->>> The driver should help to start own developments.
->>> It is planned to develop a Windows Version too. But this may take time.
->>> Code needs (as always) improvement
->>> I cannot help you in case of problems as I have no time for it
->>> Asking is always an option, but don't wonder to get NO response!
+* The driver should help to start own developments.
+* It is planned to develop a Windows Version too. But this may take time.
+* Code needs (as always) improvement
+* I cannot help you in case of problems as I have no time for it
+  * Asking is always an option, but don't wonder to get NO response!
 
-* My paradigmas:*
------------------
+## My paradigmas:
 
 * I (try to) develop portable code
 * I dislike warnings
