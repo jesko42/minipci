@@ -11,6 +11,7 @@ Here I develop a generic PCIe driver. Idea was based on the lack of a usable dri
 
 ## My paradigmas:
 
+* Easy, easy, easy
 * I (try to) develop portable code
 * I dislike warnings
 * Code should be easy to understand
