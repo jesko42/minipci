@@ -40,7 +40,7 @@ Template for additions ;-)
 * http://stackoverflow.com/questions/36762974/how-to-use-mmapproc-shared-memory-between-kernel-and-userspace
 * http://elinux.org/Debugging_by_printing
 
-Errors
+### Errors
 
 * Error States for LKM Development (/usr/include/asm-generic/errno-base.h)
 * Error States for LKM Development (/usr/include/asm-generic/errno.h)
