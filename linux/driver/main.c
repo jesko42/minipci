@@ -3,12 +3,13 @@
 #include <linux/cdev.h>
 #include <linux/interrupt.h>
 #include <linux/ratelimit.h>
-
-#define DEV_DRIVER_NAME "afapci"
 #include <linux/pci.h>
 
 #define DRV_EXTRAVERSION ""
-#define DRV_VERSION "0.1" DRV_EXTRAVERSION
+#define DRV_VERSION "0.2" DRV_EXTRAVERSION
+
+// 0.1 - only read and write
+// 0.2 - mmap added
 
 char afad_driver_name[] = "minipci";
 const char afad_driver_version[] = DRV_VERSION;
@@ -119,19 +120,6 @@ MPD_mmap(
 	}
         return 0;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 static int
 MPD_open(
