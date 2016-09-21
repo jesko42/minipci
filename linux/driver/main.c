@@ -5,14 +5,14 @@
 #include <linux/ratelimit.h>
 #include <linux/pci.h>
 
-#define DRV_EXTRAVERSION ""
-#define DRV_VERSION "0.2" DRV_EXTRAVERSION
+#define MPD_EXTRAVERSION ""
+#define MPD_VERSION "0.2" MPD_EXTRAVERSION
 
 // 0.1 - only read and write
 // 0.2 - mmap added
 
-char afad_driver_name[] = "minipci";
-const char afad_driver_version[] = DRV_VERSION;
+char MPD_driver_name[] = "minipci";
+const char MPD_driver_version[] = MPD_VERSION;
 
 static struct pci_device_id
 	MPD_id_table[] =
@@ -43,6 +43,10 @@ typedef struct
 	struct device *driverDevice;
 	MPD_BAR_t bars[ 6 ];
 	struct cdev charDev;
+	unsigned long BARIndex;
+	unsigned long maxBARIndex;
+	unsigned long barMask;
+	unsigned long maxBARs;
 	int irq;
 	int numDevices;
 	int driverMajor;
@@ -57,6 +61,62 @@ static MPD_WorkData_t MPD_AdapterBoard;
 // MPD device functions
 //
 // =======================================================================================================
+
+enum
+{
+	MPD_BAR_CHG = 1024,
+	MPD_GET_BAR_MASK,
+	MPD_GET_BAR_MAX_INDEX,
+	MPD_GET_BAR_MAX_NUM,
+} MPD_IOCTLS;
+
+static long
+MPD_ioctl(
+	struct file *filp,
+	unsigned int cmd,
+	unsigned long arg )
+{
+	switch ( cmd )
+	{
+		// we have a maximum of 6 BARs (Basic Address Ranges).
+		// During initialization we collected the maximum index
+		// and created a mask indicating which BAR is usable
+		// (length different from zero)
+		case MPD_BAR_CHG:
+		{
+			// check index against max index of BARs
+			if ( arg < MPD_AdapterBoard.maxBARIndex )
+			{
+				// check index against usable index
+				if ( MPD_AdapterBoard.barMask & ( 1 << MPD_AdapterBoard.maxBARIndex ))
+				{
+					MPD_AdapterBoard.BARIndex = arg;
+					break;
+				}
+			}
+			return -EINVAL;
+		}
+
+		// show with a mask waht different BARs are available
+		case MPD_GET_BAR_MASK:
+		{
+			return ( long ) MPD_AdapterBoard.barMask;
+		}
+
+		// the maximum index of a BAR ranges from 0 to 5 (maximum is 6 BARs)
+		case MPD_GET_BAR_MAX_INDEX:
+		{
+			return ( long ) MPD_AdapterBoard.maxBARIndex;
+		}
+
+		// here we return the number of used BARs
+		case MPD_GET_BAR_MAX_NUM:
+		{
+			return ( long ) MPD_AdapterBoard.maxBARs;
+		}
+	}
+	return 0;
+}
 
 static ssize_t
 MPD_read(
@@ -160,12 +220,13 @@ MPD_release(
 
 struct file_operations MPD_fops =
 {
-	.owner   = THIS_MODULE,
-	.read    = MPD_read,
-	.write   = MPD_write,
-	.mmap    = MPD_mmap,
-	.open    = MPD_open,
-	.release = MPD_release,	//close
+	.owner            = THIS_MODULE,
+	.read             = MPD_read,
+	.write            = MPD_write,
+	.unlocked_ioctl   = MPD_ioctl,
+	.mmap             = MPD_mmap,
+	.open             = MPD_open,
+	.release          = MPD_release,	//close
 };
 
 // =======================================================================================================
@@ -182,43 +243,53 @@ MPD_probe(
 	unsigned long i;
 	unsigned long mmioStart;
 	unsigned long mmioLen;
+	unsigned long barMask = 0;	// all valid BARs get an one-bit here
+	unsigned long maxBARs = 0;	// number of valid identified BARs
+	unsigned long maxBARIndex = 0;	// index of highes valid BAR index
 	struct device *dev = &pdev->dev;
 
-	printk(KERN_INFO "MPD_probe: driver init: %s (enter) ==================\n", afad_driver_name );
-	do
+	printk(KERN_INFO "MPD_probe: driver init: %s (enter) ==================\n", MPD_driver_name );
+
+	err = pci_enable_device( pdev );
+	if ( err )
 	{
-		err = pci_enable_device( pdev );
-		if ( err )
-		{
-			dev_err( dev, "pci_enable_device probe error %d for device %s\n",
-				 err, pci_name(pdev));
-			return err;
-		}
+		dev_err( dev, "pci_enable_device probe error %d for device %s\n",
+			 err, pci_name(pdev));
+		return err;
+	}
 
-		for ( i = 0; i < sizeof( MPD_AdapterBoard.bars ) / sizeof( MPD_BAR_t ); ++i )
+	for ( i = 0; i < sizeof( MPD_AdapterBoard.bars ) / sizeof( MPD_BAR_t ); ++i )
+	{
+		printk( "BAR#%ld:\n", i );
+		MPD_AdapterBoard.bars[ i ].barValid = 0;
+		mmioStart = pci_resource_start( pdev, i );
+		mmioLen   = pci_resource_len( pdev, i );
+		printk( "Start: [0x%8.8lx] %lu\n", mmioStart, mmioStart );
+		printk( "Len:   [0x%8.8lx] %lu\n", mmioLen, mmioLen );
+		MPD_AdapterBoard.bars[ i ].barHWAddress = pci_iomap( pdev, i, mmioLen );
+		MPD_AdapterBoard.bars[ i ].mmioStart = mmioStart;
+		MPD_AdapterBoard.bars[ i ].barSizeInBytes = mmioLen;
+		printk( "Addr:  [0x%p]\n", MPD_AdapterBoard.bars[ i ].barHWAddress );
+		MPD_AdapterBoard.bars[ i ].barFlags = pci_resource_flags( pdev, i );
+		printk( "Flags: [0x%8.8lx] %lu\n", MPD_AdapterBoard.bars[ i ].barFlags, MPD_AdapterBoard.bars[ i ].barFlags );
+		if (( NULL != MPD_AdapterBoard.bars[ i ].barHWAddress   ) &&
+		    (    0 != MPD_AdapterBoard.bars[ i ].barSizeInBytes ))
 		{
-printk( "BAR#%ld:\n", i );
-			MPD_AdapterBoard.bars[ i ].barValid = 0;
-			mmioStart = pci_resource_start( pdev, i );
-			mmioLen   = pci_resource_len( pdev, i );
-printk( "Start: [0x%8.8lx] %lu\n", mmioStart, mmioStart );
-printk( "Len:   [0x%8.8lx] %lu\n", mmioLen, mmioLen );
-			MPD_AdapterBoard.bars[ i ].barHWAddress = pci_iomap( pdev, i, mmioLen );
-			MPD_AdapterBoard.bars[ i ].mmioStart = mmioStart;
-			MPD_AdapterBoard.bars[ i ].barSizeInBytes = mmioLen;
-//ioremap( mmioStart, mmioLen );
-printk( "Addr:  [0x%p]\n", MPD_AdapterBoard.bars[ i ].barHWAddress );
-			MPD_AdapterBoard.bars[ i ].barFlags = pci_resource_flags( pdev, i );
-printk( "Flags: [0x%8.8lx] %lu\n", MPD_AdapterBoard.bars[ i ].barFlags, MPD_AdapterBoard.bars[ i ].barFlags );
-			if ( NULL != MPD_AdapterBoard.bars[ i ].barHWAddress )
-			{
-				MPD_AdapterBoard.bars[ i ].barValid = 1;
-			}
+			MPD_AdapterBoard.bars[ i ].barValid = 1;
+			barMask |= 1 << i;
+			maxBARs++;
+			maxBARIndex = i;
 		}
-		err = pci_request_regions( pdev, DEV_DRIVER_NAME );
-	} while ( 0 );
+	}
+	MPD_AdapterBoard.barMask = barMask;
+	MPD_AdapterBoard.maxBARs = maxBARs;
+	MPD_AdapterBoard.maxBARIndex = maxBARIndex;
+	err = pci_request_regions( pdev, MPD_driver_name );
 
-	printk(KERN_INFO "MPD_probe: driver init: %s (exit) ===================\n", afad_driver_name );
+	printk(KERN_INFO "MPD_probe: driver init: barMask: 0x%2.2lx\n", MPD_AdapterBoard.barMask );
+	printk(KERN_INFO "MPD_probe: driver init: maxBARs: %ld\n", MPD_AdapterBoard.maxBARs );
+	printk(KERN_INFO "MPD_probe: driver init: maxBARIndx: %ld\n", MPD_AdapterBoard.maxBARIndex );
+	printk(KERN_INFO "MPD_probe: driver init: %s (exit) ===================\n", MPD_driver_name );
 	return err;
 }
 
@@ -227,7 +298,7 @@ MPD_remove(
 	struct pci_dev *pdev )
 {
 	unsigned long i;
-	printk(KERN_INFO "MPD_remove: driver remove: %s (enter) ===============\n", afad_driver_name );
+	printk(KERN_INFO "MPD_remove: driver remove: %s (enter) ===============\n", MPD_driver_name );
 //	free_irq( pdev->irq, xxx );
 	for ( i = 0; i < sizeof( MPD_AdapterBoard.bars ) / sizeof( MPD_BAR_t ); ++i )
 	{
@@ -239,14 +310,14 @@ MPD_remove(
 	}
 	pci_release_regions( pdev );
 	pci_disable_device( pdev );
-	printk(KERN_INFO "MPD_remove: driver remove: %s (exit) ================\n", afad_driver_name );
+	printk(KERN_INFO "MPD_remove: driver remove: %s (exit) ================\n", MPD_driver_name );
 }
 
 static void
 MPD_shutdown(
 	struct pci_dev *pdev )
 {
-	printk(KERN_INFO "MPD_shutdown: driver shutdown: %s ===================\n", afad_driver_name );
+	printk(KERN_INFO "MPD_shutdown: driver shutdown: %s ===================\n", MPD_driver_name );
 }
 
 // =======================================================================================================
@@ -254,7 +325,7 @@ MPD_shutdown(
 static struct pci_driver
 	MPD_pci_driver_struct =
 	{
-		.name = afad_driver_name,
+		.name = MPD_driver_name,
 		.id_table = MPD_id_table,
 		.probe = MPD_probe,
 		.remove = MPD_remove,
@@ -276,7 +347,7 @@ MPD_init(void)
 
 	do
 	{
-		printk(KERN_INFO "MPD_init: driver start: %s (enter) ==================\n", afad_driver_name );
+		printk(KERN_INFO "MPD_init: driver start: %s (enter) ==================\n", MPD_driver_name );
 
 		// clean memory "because you can never be too clean" ...
 		stage++;
@@ -300,7 +371,7 @@ MPD_init(void)
 			&majorDev,
 			0,
 			MPD_AdapterBoard.numDevices,
-			afad_driver_name );
+			MPD_driver_name );
 		if ( 0 > rv )
 		{
 			pr_err( "alloc_chardev_region errror\n" );
@@ -335,7 +406,7 @@ MPD_init(void)
 		stage++;
 		// 6
 		printk(KERN_INFO "MPD_init: class_create\n" );
-		MPD_AdapterBoard.driverClass = class_create( THIS_MODULE, afad_driver_name );
+		MPD_AdapterBoard.driverClass = class_create( THIS_MODULE, MPD_driver_name );
 		if ( NULL == MPD_AdapterBoard.driverClass )
 		{
 			pr_err( "class_create error\n" );
@@ -347,7 +418,7 @@ MPD_init(void)
 		// create "/dev" node
 		stage++;
 		// 7
-		sprintf( name, "%s%%d", afad_driver_name );	// construct "<name>i%d"
+		sprintf( name, "%s%%d", MPD_driver_name );	// construct "<name>i%d"
 		printk(KERN_INFO "MPD_init: device_create\n" );
 		MPD_AdapterBoard.driverDevice = device_create(
 			MPD_AdapterBoard.driverClass,
@@ -427,7 +498,7 @@ MPD_init(void)
 		}
 	}
 
-	printk(KERN_INFO "MPD_init: driver start: %s (exit) ===================\n", afad_driver_name );
+	printk(KERN_INFO "MPD_init: driver start: %s (exit) ===================\n", MPD_driver_name );
 	return err;
 }
 module_init( MPD_init );
@@ -440,7 +511,7 @@ module_init( MPD_init );
 static void __exit
 MPD_exit(void)
 {
-	printk(KERN_INFO "MPD_exit: driver shutdown: %s (enter) ===============\n", afad_driver_name );
+	printk(KERN_INFO "MPD_exit: driver shutdown: %s (enter) ===============\n", MPD_driver_name );
 	pci_unregister_driver(
 		&MPD_pci_driver_struct );
 	device_destroy(
@@ -453,12 +524,12 @@ MPD_exit(void)
 	unregister_chrdev_region(
 		MKDEV( MPD_AdapterBoard.driverMajor, MPD_AdapterBoard.driverMinor ),
 		MPD_AdapterBoard.numDevices );
-	printk(KERN_INFO "MPD_exit: driver shutdown: %s (exit) ================\n", afad_driver_name );
+	printk(KERN_INFO "MPD_exit: driver shutdown: %s (exit) ================\n", MPD_driver_name );
 }
 module_exit( MPD_exit );
 
 MODULE_AUTHOR( "Systemberatung Schwarzer, Jesko Schwarzer, <minipci@schwarzers.de>" );
 MODULE_LICENSE( "GPL" );
-MODULE_DESCRIPTION( "Systemberatung Schwarzer (C) 2016/09 Driver for VC709 board from Xilinx" );
-MODULE_VERSION( DRV_VERSION );
+MODULE_DESCRIPTION( "Systemberatung Schwarzer (C) 2016/09 Mini PCI Driver" );
+MODULE_VERSION( MPD_VERSION );
 

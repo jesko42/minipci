@@ -12,6 +12,22 @@
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 
+// remeber:
+//
+// in 64-bit linux systems a long is a 64-bit type (sizeof(long)=8) !
+
+#define USE_MMAP
+//#define USE_READ_WRITE
+//#define PRINTOUT_64K
+
+enum
+{
+        MPD_BAR_CHG = 1024,
+        MPD_GET_BAR_MASK,
+        MPD_GET_BAR_MAX_INDEX,
+        MPD_GET_BAR_MAX_NUM,
+} MPD_IOCTLS;
+
 int main()
 {
 	int rc;
@@ -19,8 +35,10 @@ int main()
 	void *bufferSrc = NULL;
 	void *bufferDst = NULL;
 	void *bufferDev = NULL;
-	unsigned long sizeTest = 256 * 1024 * 1024;
+	unsigned long sizeTest = 32 * 1024 * 1024;
 	unsigned long ii, jj;
+	unsigned long rv;
+	unsigned long status;
 	unsigned long *p;
 	unsigned char *c;
 
@@ -32,11 +50,19 @@ int main()
 		exit( -1 );
 	}
 
+	printf( "* get infos from board\n" );
+	rv = ioctl( fileHandle, MPD_GET_BAR_MASK, &status );
+	printf( "  BARMask (%16.16llx): 0x%2.2lx\n", status, rv );
+	rv = ioctl( fileHandle, MPD_GET_BAR_MAX_INDEX, &status );
+	printf( "  BARMaxIndex (%16.16llx): %ld\n", status, rv );
+	rv = ioctl( fileHandle, MPD_GET_BAR_MAX_NUM, &status );
+	printf( "  BARMaxNum (%16.16llx): %ld\n", status, rv );
+
 	printf( "* allocate memory\n" );
 	bufferSrc = malloc( sizeTest );
-	printf( "  - bufferSrc = 0x%p\n", bufferSrc );
+	printf( "  - bufferSrc = %p\n", bufferSrc );
 	bufferDst = malloc( sizeTest );
-	printf( "  - bufferDst = 0x%p\n", bufferDst );
+	printf( "  - bufferDst = %p\n", bufferDst );
 	if (( NULL == bufferSrc ) || ( NULL == bufferDst ))
 	{
 		printf( "Out of memory\n" );
@@ -54,7 +80,7 @@ int main()
 		c[ ii ] = ( unsigned char )ii;
 	}
 
-#if 1
+#ifdef USE_MMAP
 	printf( "* map memory\n" );
 	bufferDev = mmap( 0, sizeTest, PROT_WRITE, MAP_SHARED, fileHandle, 0 );
 	if ( MAP_FAILED == bufferDev )
@@ -67,7 +93,9 @@ int main()
 
 	printf( "* read hardware\n" );
 	memcpy( bufferDst, bufferDev, sizeTest );
-#else
+#endif
+
+#ifdef USE_READ_WRITE
 	printf( "* write hardware\n" );
         rc = write( fileHandle, bufferSrc, sizeTest );
 	printf( "  - rc = %ld (should be zero)\n", rc );	// hmmm: ~16MB/s
@@ -80,7 +108,7 @@ int main()
 	rc = memcmp( bufferSrc, bufferDst, sizeTest );
 	printf( "  - rc = %ld (should be zero)\n", rc );
 
-#if 0
+#ifdef PRINTOUT_64K
 	c = ( unsigned char * )bufferDst;
 	for ( ii = 1 * 1024 * 1024; ii < ( 1 * 1024 * 1024 + 64 * 1024 ); ii += 16 )
 	{
