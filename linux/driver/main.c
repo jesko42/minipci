@@ -6,10 +6,11 @@
 #include <linux/pci.h>
 
 #define MPD_EXTRAVERSION ""
-#define MPD_VERSION "0.2" MPD_EXTRAVERSION
+#define MPD_VERSION "0.3" MPD_EXTRAVERSION
 
 // 0.1 - only read and write
 // 0.2 - mmap added
+// 0.3 - IOCTL added
 
 char MPD_driver_name[] = "minipci";
 const char MPD_driver_version[] = MPD_VERSION;
