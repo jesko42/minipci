@@ -130,7 +130,7 @@ MPD_read(
 	phys_addr_t pa;
 
 	printk( "read: 0x%p [%ld, 0x%8.8lx]\n", buffer, bufferSize, bufferSize );
-	unusedBytes = copy_to_user( ( void * ) buffer, MPD_AdapterBoard.bars[ 0 ].barHWAddress, bufferSize );
+	unusedBytes = copy_to_user( ( void * ) buffer, MPD_AdapterBoard.bars[ MPD_AdapterBoard.BARIndex ].barHWAddress, bufferSize );
 	printk( "read: %ld [%ld]\n", bufferSize, unusedBytes );
 
 //phys_addr_t virt_to_phys( volatile void *address );
@@ -151,7 +151,7 @@ MPD_write(
 {
 	unsigned long unusedBytes;
 	printk( "write: 0x%p [%ld, 0x%8.8lx]\n", buffer, bufferSize, bufferSize );
-	unusedBytes = copy_from_user( MPD_AdapterBoard.bars[ 0 ].barHWAddress, ( void * ) buffer, bufferSize );
+	unusedBytes = copy_from_user( MPD_AdapterBoard.bars[ MPD_AdapterBoard.BARIndex ].barHWAddress, ( void * ) buffer, bufferSize );
 	printk( "write: %ld [%ld]\n", bufferSize, unusedBytes );
 	return 0;
 }
@@ -166,12 +166,12 @@ MPD_mmap(
 	printk( "mmap: vm_start: 0x%8.8lx, vm_end: 0x%8.8lx, vm_pgoff: 0x%8.8lx\n", vma->vm_start, vma->vm_end, vma->vm_pgoff );
 
 	offset = vma->vm_pgoff << PAGE_SHIFT;
-        if (( offset + ( vma->vm_end - vma->vm_start )) > MPD_AdapterBoard.bars[ 0 ].barSizeInBytes )
+        if (( offset + ( vma->vm_end - vma->vm_start )) > MPD_AdapterBoard.bars[ MPD_AdapterBoard.BARIndex ].barSizeInBytes )
 	{
                 return -EINVAL;
 	}
 
-        offset += (unsigned long) MPD_AdapterBoard.bars[ 0 ].mmioStart;
+        offset += (unsigned long) MPD_AdapterBoard.bars[ MPD_AdapterBoard.BARIndex ].mmioStart;
 
         vma->vm_page_prot = pgprot_noncached( vma->vm_page_prot );
 
