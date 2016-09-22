@@ -36,11 +36,13 @@ int main()
 	void *bufferDst = NULL;
 	void *bufferDev = NULL;
 	unsigned long sizeTest = 32 * 1024 * 1024;
+	unsigned long humanReadableSize = sizeTest;
 	unsigned long ii, jj;
 	unsigned long rv;
-	unsigned long status;
+	unsigned long status = 0xfedcba9876543210;
 	unsigned long *p;
 	unsigned char *c;
+	unsigned char u = ' ';	// Unit
 
 	printf( "* open file\n" );
 	fileHandle = open( "/dev/minipci0", O_RDWR );
@@ -51,14 +53,20 @@ int main()
 	}
 
 	printf( "* get infos from board\n" );
-	rv = ioctl( fileHandle, MPD_GET_BAR_MASK, &status );
+	rv = ioctl( fileHandle, MPD_GET_BAR_MASK, status );
 	printf( "  BARMask (%16.16llx): 0x%2.2lx\n", status, rv );
-	rv = ioctl( fileHandle, MPD_GET_BAR_MAX_INDEX, &status );
+	rv = ioctl( fileHandle, MPD_GET_BAR_MAX_INDEX, status );
 	printf( "  BARMaxIndex (%16.16llx): %ld\n", status, rv );
-	rv = ioctl( fileHandle, MPD_GET_BAR_MAX_NUM, &status );
+	rv = ioctl( fileHandle, MPD_GET_BAR_MAX_NUM, status );
 	printf( "  BARMaxNum (%16.16llx): %ld\n", status, rv );
 
-	printf( "* allocate memory\n" );
+	while ( humanReadableSize / 1024 > 0 )
+	{
+		u = ( ' ' == u ) ? 'k' : (( 'k' == u ) ? 'M' :  'G' );
+		humanReadableSize /= 1024;
+	}
+
+	printf( "* allocate memory (%ld, %ld%cb )\n", sizeTest, humanReadableSize, u );
 	bufferSrc = malloc( sizeTest );
 	printf( "  - bufferSrc = %p\n", bufferSrc );
 	bufferDst = malloc( sizeTest );

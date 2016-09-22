@@ -77,6 +77,7 @@ MPD_ioctl(
 	unsigned int cmd,
 	unsigned long arg )
 {
+	printk(KERN_INFO " MPD_ioctl: cmd = %d, arg = %16.16lu [0x%16.16lx]\n", cmd, arg, arg );
 	switch ( cmd )
 	{
 		// we have a maximum of 6 BARs (Basic Address Ranges).
@@ -98,7 +99,7 @@ MPD_ioctl(
 			return -EINVAL;
 		}
 
-		// show with a mask waht different BARs are available
+		// show with a mask what different BARs are available
 		case MPD_GET_BAR_MASK:
 		{
 			return ( long ) MPD_AdapterBoard.barMask;
@@ -115,6 +116,10 @@ MPD_ioctl(
 		{
 			return ( long ) MPD_AdapterBoard.maxBARs;
 		}
+
+		// nothing useful received
+		default:
+			return -EINVAL;
 	}
 	return 0;
 }
@@ -349,6 +354,7 @@ MPD_init(void)
 	do
 	{
 		printk(KERN_INFO "MPD_init: driver start: %s (enter) ==================\n", MPD_driver_name );
+		printk(KERN_INFO "MPD_init: driver version: %s\n", MPD_driver_version );
 
 		// clean memory "because you can never be too clean" ...
 		stage++;
