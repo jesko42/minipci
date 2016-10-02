@@ -20,6 +20,8 @@
 //#define USE_READ_WRITE
 //#define PRINTOUT_64K
 
+#define BAR_USAGE	( 0 )	/* default index of bar to use for test */
+
 enum
 {
         MPD_BAR_CHG = 1024,
@@ -51,7 +53,7 @@ int main()
 		printf( "Device cannot be opened\n" );
 		exit( -1 );
 	}
-
+printf("<return>\n");getchar();
 	printf( "* get infos from board\n" );
 	rv = ioctl( fileHandle, MPD_GET_BAR_MASK, status );
 	printf( "  BARMask (%16.16llx): 0x%2.2lx\n", status, rv );
@@ -59,7 +61,7 @@ int main()
 	printf( "  BARMaxIndex (%16.16llx): %ld\n", status, rv );
 	rv = ioctl( fileHandle, MPD_GET_BAR_MAX_NUM, status );
 	printf( "  BARMaxNum (%16.16llx): %ld\n", status, rv );
-
+printf("<return>\n");getchar();
 	while ( humanReadableSize / 1024 > 0 )
 	{
 		u = ( ' ' == u ) ? 'k' : (( 'k' == u ) ? 'M' :  'G' );
@@ -81,6 +83,7 @@ int main()
 	memset( bufferSrc, 0x00, sizeTest );
 	memset( bufferDst, 0x00, sizeTest );
 
+printf("<return>\n");getchar();
 	printf( "* fill memory2\n" );
 	c = ( unsigned char * )bufferSrc;
 	for ( ii = 0; ii < sizeTest; ++ii )
@@ -89,11 +92,13 @@ int main()
 	}
 
 
-	printf( "* use BAR#1\n" );
-	rv = ioctl( fileHandle, MPD_BAR_CHG, 1 );
+printf("<return>\n");getchar();
+	printf( "* use BAR#%d\n", BAR_USAGE );
+	rv = ioctl( fileHandle, MPD_BAR_CHG, BAR_USAGE );
 	printf( "  rv = %d\n", rv );
 
 
+printf("<return>\n");getchar();
 #ifdef USE_MMAP
 	printf( "* map memory\n" );
 	bufferDev = mmap( 0, sizeTest, PROT_WRITE, MAP_SHARED, fileHandle, 0 );
@@ -102,11 +107,16 @@ int main()
 		printf( "Mmap failed\n" );
 		exit( -1 );
 	}
+printf("<return>\n");getchar();
 	printf( "* write hardware\n" );
 	memcpy( bufferDev, bufferSrc, sizeTest );
 
+printf("<return>\n");getchar();
 	printf( "* read hardware\n" );
 	memcpy( bufferDst, bufferDev, sizeTest );
+
+printf("<return>\n");getchar();
+exit(0);
 #endif
 
 #ifdef USE_READ_WRITE

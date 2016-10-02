@@ -5,8 +5,8 @@
 #include <linux/ratelimit.h>
 #include <linux/pci.h>
 
-#define MPD_EXTRAVERSION ""
-#define MPD_VERSION "0.3" MPD_EXTRAVERSION
+#define MPD_EXTRAVERSION
+#define MPD_VERSION 		"0.4" MPD_EXTRAVERSION
 
 // 0.1 - only read and write
 // 0.2 - mmap added
@@ -77,7 +77,7 @@ MPD_ioctl(
 	unsigned int cmd,
 	unsigned long arg )
 {
-	printk(KERN_INFO " MPD_ioctl: cmd = %d, arg = %16.16lu [0x%16.16lx]\n", cmd, arg, arg );
+	printk(KERN_INFO "MPD_ioctl: cmd = %d, arg = %lu [0x%16.16lx]\n", cmd, arg, arg );
 	switch ( cmd )
 	{
 		// we have a maximum of 6 BARs (Basic Address Ranges).
@@ -87,15 +87,17 @@ MPD_ioctl(
 		case MPD_BAR_CHG:
 		{
 			// check index against max index of BARs
-			if ( arg < MPD_AdapterBoard.maxBARIndex )
+			if ( arg <= MPD_AdapterBoard.maxBARIndex )
 			{
 				// check index against usable index
-				if ( MPD_AdapterBoard.barMask & ( 1 << MPD_AdapterBoard.maxBARIndex ))
+				if ( MPD_AdapterBoard.barMask & ( 1 << arg ))
 				{
 					MPD_AdapterBoard.BARIndex = arg;
+					printk( KERN_INFO "MPD_ioctl: MPD_BAR_CHG successful\n" );
 					break;
 				}
 			}
+			printk( KERN_INFO "MPD_ioctl: MPD_BAR_CHG error\n" );
 			return -EINVAL;
 		}
 
@@ -167,12 +169,14 @@ MPD_mmap(
 	struct vm_area_struct *vma )
 {
         unsigned long offset;
+	int rc;
 
 	printk( "mmap: vm_start: 0x%8.8lx, vm_end: 0x%8.8lx, vm_pgoff: 0x%8.8lx\n", vma->vm_start, vma->vm_end, vma->vm_pgoff );
 
 	offset = vma->vm_pgoff << PAGE_SHIFT;
         if (( offset + ( vma->vm_end - vma->vm_start )) > MPD_AdapterBoard.bars[ MPD_AdapterBoard.BARIndex ].barSizeInBytes )
 	{
+		printk( KERN_INFO "MPD_mmap: size error\n" );
                 return -EINVAL;
 	}
 
@@ -180,8 +184,10 @@ MPD_mmap(
 
         vma->vm_page_prot = pgprot_noncached( vma->vm_page_prot );
 
-        if ( io_remap_pfn_range(vma, vma->vm_start, offset >> PAGE_SHIFT, vma->vm_end - vma->vm_start, vma->vm_page_prot ))
+        rc = io_remap_pfn_range( vma, vma->vm_start, offset >> PAGE_SHIFT, vma->vm_end - vma->vm_start, vma->vm_page_prot );
+	if ( rc )
 	{
+		printk( KERN_INFO "MPD_mmap: io_remap_pfn_range() error: rc = %d\n", rc );
                 return -EAGAIN;
 	}
         return 0;
@@ -355,7 +361,8 @@ MPD_init(void)
 	{
 		printk(KERN_INFO "MPD_init: driver start: %s (enter) ==================\n", MPD_driver_name );
 		printk(KERN_INFO "MPD_init: driver version: %s\n", MPD_driver_version );
-
+ 		//printk(KERN_INFO "MPD_INIT: " __DATE__ ", " __TIME__ ")" );
+ 
 		// clean memory "because you can never be too clean" ...
 		stage++;
 		// 1
