@@ -35,7 +35,7 @@ int main()
 	void *bufferSrc = NULL;
 	void *bufferDst = NULL;
 	void *bufferDev = NULL;
-	unsigned long sizeTest = 32 * 1024 * 1024;
+	unsigned long sizeTest = 1 * 1024 * 1024;
 	unsigned long humanReadableSize = sizeTest;
 	unsigned long ii, jj;
 	unsigned long rv;
@@ -87,6 +87,12 @@ int main()
 	{
 		c[ ii ] = ( unsigned char )ii;
 	}
+
+
+	printf( "* use BAR#1\n" );
+	rv = ioctl( fileHandle, MPD_BAR_CHG, 1 );
+	printf( "  rv = %d\n", rv );
+
 
 #ifdef USE_MMAP
 	printf( "* map memory\n" );

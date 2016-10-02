@@ -2,6 +2,10 @@
 
 ## commands
 ```
+[prompt]# modinfo <module name>
+```
+Shows all info about the module
+```
 [prompt]# lspci
 ```
 List all pci components
