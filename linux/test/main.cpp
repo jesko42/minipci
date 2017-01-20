@@ -22,7 +22,7 @@
 
 #define BAR_USAGE	( 0 )	/* default index of bar to use for test */
 
-enum
+enum MPD_IOCTLS_tag
 {
         MPD_BAR_CHG = 1024,
         MPD_GET_BAR_MASK,
@@ -56,11 +56,11 @@ int main()
 printf("<return>\n");getchar();
 	printf( "* get infos from board\n" );
 	rv = ioctl( fileHandle, MPD_GET_BAR_MASK, status );
-	printf( "  BARMask (%16.16llx): 0x%2.2lx\n", status, rv );
+	printf( "  BARMask (%16.16lx): 0x%2.2lx\n", status, rv );
 	rv = ioctl( fileHandle, MPD_GET_BAR_MAX_INDEX, status );
-	printf( "  BARMaxIndex (%16.16llx): %ld\n", status, rv );
+	printf( "  BARMaxIndex (%16.16lx): %ld\n", status, rv );
 	rv = ioctl( fileHandle, MPD_GET_BAR_MAX_NUM, status );
-	printf( "  BARMaxNum (%16.16llx): %ld\n", status, rv );
+	printf( "  BARMaxNum (%16.16lx): %ld\n", status, rv );
 printf("<return>\n");getchar();
 	while ( humanReadableSize / 1024 > 0 )
 	{
@@ -95,7 +95,7 @@ printf("<return>\n");getchar();
 printf("<return>\n");getchar();
 	printf( "* use BAR#%d\n", BAR_USAGE );
 	rv = ioctl( fileHandle, MPD_BAR_CHG, BAR_USAGE );
-	printf( "  rv = %d\n", rv );
+	printf( "  rv = %ld\n", rv );
 
 
 printf("<return>\n");getchar();
@@ -116,21 +116,28 @@ printf("<return>\n");getchar();
 	memcpy( bufferDst, bufferDev, sizeTest );
 
 printf("<return>\n");getchar();
-exit(0);
 #endif
 
 #ifdef USE_READ_WRITE
 	printf( "* write hardware\n" );
         rc = write( fileHandle, bufferSrc, sizeTest );
-	printf( "  - rc = %ld (should be zero)\n", rc );	// hmmm: ~16MB/s
+	printf( "  - rc = %d (should be zero)\n", rc );		// hmmm: ~16MB/s
 
 	printf( "* read hardware\n" );
         rc = read( fileHandle, bufferDst, sizeTest );		// hmmm: ~1MB/s
-	printf( "  - rc = %ld (should be zero)\n", rc );
+	printf( "  - rc = %d (should be zero)\n", rc );
 #endif
 	printf( "* compare data\n" );
 	rc = memcmp( bufferSrc, bufferDst, sizeTest );
-	printf( "  - rc = %ld (should be zero)\n", rc );
+	if ( 0 != rc )
+	{
+		printf( "  - rc = %d (this is an error! should be zero)\n", rc );
+	}
+	else
+	{
+		printf( "  - success!!\n", rc );
+	}
+
 
 #ifdef PRINTOUT_64K
 	c = ( unsigned char * )bufferDst;

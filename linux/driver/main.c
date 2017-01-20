@@ -4,21 +4,44 @@
 #include <linux/interrupt.h>
 #include <linux/ratelimit.h>
 #include <linux/pci.h>
+#include <linux/irqreturn.h>
+
+#include <linux/uaccess.h>
+#include <linux/kernel.h>
+#include <linux/kernel.h>
+#include <linux/kernel.h>
+#include <linux/kernel.h>
+#include <linux/module.h>
+#include <linux/kernel.h>
+#include <linux/sched.h>
+#include <linux/interrupt.h>
+#include <linux/time.h>
+#include <linux/timer.h>
+#include <linux/fs.h>
+#include <linux/miscdevice.h>
+#include <linux/string.h>
+#include <linux/errno.h>
+#include <linux/init.h>
+
+#include <asm/uaccess.h>
+#include <asm/irq.h>
 
 #define MPD_EXTRAVERSION
-#define MPD_VERSION 		"0.4" MPD_EXTRAVERSION
+#define MPD_VERSION 		"0.5" MPD_EXTRAVERSION
 
 // 0.1 - only read and write
 // 0.2 - mmap added
 // 0.3 - IOCTL added
+// 0.4 - Switch between BARs with IOCTL MPD_BAR_CHG (1024)
+// 0.5 - fix modprobe problem
 
 char MPD_driver_name[] = "minipci";
 const char MPD_driver_version[] = MPD_VERSION;
 
 static struct pci_device_id
 	MPD_id_table[] =
-	{
-		{ 0x10ee, 0x7038, PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0 },
+	{      // Vendor, DeviceID,
+		{ 0x10ee, 0x7038  , PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0 },
 		{ 0 },
 	};
 
@@ -56,6 +79,7 @@ typedef struct
 } MPD_WorkData_t;
 
 static MPD_WorkData_t MPD_AdapterBoard;
+static atomic_t MPD_OpenCount = ATOMIC_INIT( 0 );
 
 // =======================================================================================================
 //
@@ -241,6 +265,14 @@ struct file_operations MPD_fops =
 	.release          = MPD_release,	//close
 };
 
+static irqreturn_t
+MPD_IrqHandler(
+	int irq,
+	void *devID )
+{
+	return IRQ_HANDLED;	// possible returns: IRQ_NONE, IRQ_HANDLED, IRQ_WAKE_THREAD 
+}
+
 // =======================================================================================================
 //
 // MPD management functions
@@ -257,19 +289,19 @@ MPD_probe(
 	unsigned long mmioLen;
 	unsigned long barMask = 0;	// all valid BARs get an one-bit here
 	unsigned long maxBARs = 0;	// number of valid identified BARs
-	unsigned long maxBARIndex = 0;	// index of highes valid BAR index
+	unsigned long maxBARIndex = 0;	// index of highest valid BAR index
 	struct device *dev = &pdev->dev;
 
-	printk(KERN_INFO "MPD_probe: driver init: %s (enter) ==================\n", MPD_driver_name );
+	printk( KERN_INFO "MPD_probe: driver init: %s (enter) ==================\n", MPD_driver_name );
 
 	err = pci_enable_device( pdev );
 	if ( err )
 	{
-		dev_err( dev, "pci_enable_device probe error %d for device %s\n",
-			 err, pci_name(pdev));
+		dev_err( dev, "pci_enable_device probe error %d for device %s\n", err, pci_name( pdev ));
 		return err;
 	}
 
+	// up to now (10/2016) we have a maximum of 6 BARs
 	for ( i = 0; i < sizeof( MPD_AdapterBoard.bars ) / sizeof( MPD_BAR_t ); ++i )
 	{
 		printk( "BAR#%ld:\n", i );
@@ -297,11 +329,37 @@ MPD_probe(
 	MPD_AdapterBoard.maxBARs = maxBARs;
 	MPD_AdapterBoard.maxBARIndex = maxBARIndex;
 	err = pci_request_regions( pdev, MPD_driver_name );
+	if ( err < 0 )
+	{
+		printk(KERN_WARNING "MPD_probe: driver init: Cannot reserve all memory regions\n" );
+	}
 
-	printk(KERN_INFO "MPD_probe: driver init: barMask: 0x%2.2lx\n", MPD_AdapterBoard.barMask );
-	printk(KERN_INFO "MPD_probe: driver init: maxBARs: %ld\n", MPD_AdapterBoard.maxBARs );
-	printk(KERN_INFO "MPD_probe: driver init: maxBARIndx: %ld\n", MPD_AdapterBoard.maxBARIndex );
-	printk(KERN_INFO "MPD_probe: driver init: %s (exit) ===================\n", MPD_driver_name );
+#if 1
+	// get interrupt number
+	MPD_AdapterBoard.irq = pdev->irq;
+	printk( KERN_INFO "MPD_probe: driver init: irq number = %d\n", MPD_AdapterBoard.irq );
+
+	// enable IRQ
+	err = request_irq(
+		MPD_AdapterBoard.irq,
+		&MPD_IrqHandler,
+		IRQF_TRIGGER_RISING | IRQF_SHARED,
+		MPD_driver_name,
+		NULL );
+	if ( err < 0 )
+	{
+		printk(KERN_WARNING "MPD_probe: driver init: Cannot allocate IRQ #%d\n", MPD_AdapterBoard.irq );
+	}
+#endif
+
+	printk( KERN_INFO "MPD_probe: driver init: barMask: 0x%2.2lx\n", MPD_AdapterBoard.barMask );
+	printk( KERN_INFO "MPD_probe: driver init: maxBARs: %ld\n", MPD_AdapterBoard.maxBARs );
+	printk( KERN_INFO "MPD_probe: driver init: maxBARIndx: %ld\n", MPD_AdapterBoard.maxBARIndex );
+	printk( KERN_INFO "MPD_probe: driver init: %s (exit) ===================\n", MPD_driver_name );
+	if ( err != 0 )
+	{
+		printk(KERN_WARNING "MPD_probe: driver init: Error: %d _ DRIVER NOT LOADED!\n", err );
+	}
 	return err;
 }
 
@@ -359,8 +417,8 @@ MPD_init(void)
 
 	do
 	{
-		printk(KERN_INFO "MPD_init: driver start: %s (enter) ==================\n", MPD_driver_name );
-		printk(KERN_INFO "MPD_init: driver version: %s\n", MPD_driver_version );
+		printk( KERN_INFO "MPD_init: driver start: %s (enter) ==================\n", MPD_driver_name );
+		printk( KERN_INFO "MPD_init: driver version: %s\n", MPD_driver_version );
  		//printk(KERN_INFO "MPD_INIT: " __DATE__ ", " __TIME__ ")" );
  
 		// clean memory "because you can never be too clean" ...
@@ -390,7 +448,6 @@ MPD_init(void)
 		{
 			pr_err( "alloc_chardev_region errror\n" );
 			// here we end up having an error
-			err = 1;
 			break;
 		}
 		MPD_AdapterBoard.driverMajor = MAJOR( majorDev );
@@ -398,7 +455,7 @@ MPD_init(void)
 		// initialize fops
 		stage++;
 		// 4
-		printk(KERN_INFO "MPD_init: cdev_init\n" );
+		printk( KERN_INFO "MPD_init: cdev_init\n" );
 		cdev_init( &MPD_AdapterBoard.charDev, &MPD_fops );
 		MPD_AdapterBoard.charDev.owner = THIS_MODULE;
 
@@ -406,26 +463,24 @@ MPD_init(void)
 		stage++;
 		// 5
 		devt = MKDEV( MPD_AdapterBoard.driverMajor, MPD_AdapterBoard.driverMinor );
-		printk(KERN_INFO "MPD_init: cdev_add\n" );
+		printk( KERN_INFO "MPD_init: cdev_add\n" );
 		rv = cdev_add( &MPD_AdapterBoard.charDev, devt, 1 );
 		if ( rv )
 		{
 			pr_err( "cdev_add error\n" );
 			// here we end up having an error
-			err = 1;
 			break;
 		}
 
-		// create sysfs entries
+		// create sysfs entries (/sys/claaa/minipci/...)
 		stage++;
 		// 6
-		printk(KERN_INFO "MPD_init: class_create\n" );
+		printk( KERN_INFO "MPD_init: class_create\n" );
 		MPD_AdapterBoard.driverClass = class_create( THIS_MODULE, MPD_driver_name );
 		if ( NULL == MPD_AdapterBoard.driverClass )
 		{
 			pr_err( "class_create error\n" );
 			// here we end up having an error
-			err = 1;
 			break;
 		}
 
@@ -433,7 +488,7 @@ MPD_init(void)
 		stage++;
 		// 7
 		sprintf( name, "%s%%d", MPD_driver_name );	// construct "<name>i%d"
-		printk(KERN_INFO "MPD_init: device_create\n" );
+		printk( KERN_INFO "MPD_init: device_create\n" );
 		MPD_AdapterBoard.driverDevice = device_create(
 			MPD_AdapterBoard.driverClass,
 			NULL,
@@ -445,71 +500,75 @@ MPD_init(void)
 		{
 			pr_err( "device_create error\n" );
 			// here we end up having an error
-			err = 1;
 			break;
 		}
 
-		// register pci device driver
+		// register pci device driver (mod probe the driver)
 		stage++;
 		// 8
-		printk(KERN_INFO "MPD_init: register_driver\n" );
+		printk( KERN_INFO "MPD_init: register_driver\n" );
 		rv = pci_register_driver(
 			&MPD_pci_driver_struct );
 		if ( 0 > rv )
 		{
 			pr_err( "pci_register_driver error\n" );
 			// here we end up having an error
-			err = 1;
 			break;
 		}
 
 		// success - fall out of pseudo-loop
-		printk(KERN_INFO "MPD_init: driver Major, Minor = %d, %d\n", MPD_AdapterBoard.driverMajor, MPD_AdapterBoard.driverMinor );
+		stage++;
+		printk( KERN_INFO "MPD_init: driver Major, Minor = %d, %d\n", MPD_AdapterBoard.driverMajor, MPD_AdapterBoard.driverMinor );
 	} while ( 0 );
 
-	if ( err )
+	// if we have an error, we have a specific stage to roll back resource allocations
+	// In case of an early stage or stage 9 we have no error
+	switch ( stage )
 	{
-		printk(KERN_ERR "Error: Stage %d\n", stage );
-		switch ( stage )
+		case 8:
 		{
-			case 8:
-			{
-				device_destroy(
-					MPD_AdapterBoard.driverClass,
-					MKDEV( MPD_AdapterBoard.driverMajor, MPD_AdapterBoard.driverMinor ));
-				// fall through
-			}
-			case 7:
-			{
-				class_destroy(
-					MPD_AdapterBoard.driverClass );
-				// fall through
-			}
-			case 6:
-			{
-				cdev_del(
-					&MPD_AdapterBoard.charDev );
-				// fall through
-			}
-			case 5:
-			case 4:
-			{
-				// unregister device
-				unregister_chrdev_region(
-					MKDEV( MPD_AdapterBoard.driverMajor, MPD_AdapterBoard.driverMinor ),
-					MPD_AdapterBoard.numDevices );
-				err = -stage;
-				break;
-			}
-			case 3:
-			case 2:
-			case 1:
-			case 0:
-			default:
-				err = 0;
-				// no error possible here
-				break;
+			printk( KERN_INFO "MPD_init: driver_destroy()\n" );
+			device_destroy(
+				MPD_AdapterBoard.driverClass,
+				MKDEV( MPD_AdapterBoard.driverMajor, MPD_AdapterBoard.driverMinor ));
+			// fall through
 		}
+		case 7:
+		{
+			printk( KERN_INFO "MPD_init: class_destroy()\n" );
+			class_destroy(
+				MPD_AdapterBoard.driverClass );
+			// fall through
+		}
+		case 6:
+		{
+			printk( KERN_INFO "MPD_init: cdev_del()\n" );
+			cdev_del(
+				&MPD_AdapterBoard.charDev );
+			// fall through
+		}
+		case 5:
+		case 4:
+		{
+			// unregister device
+			printk( KERN_INFO "MPD_init: unregister_chrdev_region()\n" );
+			unregister_chrdev_region(
+				MKDEV( MPD_AdapterBoard.driverMajor, MPD_AdapterBoard.driverMinor ),
+				MPD_AdapterBoard.numDevices );
+			err = -stage;
+			printk( KERN_ERR "Error: Stage %d (driver now completely DE-Ieinitialized!\n", stage );
+			break;
+		}
+		case 3:
+		case 2:
+		case 1:
+		case 0:
+		default:
+			err = 0;
+			// "no error" section
+			atomic_inc( &MPD_OpenCount );
+
+			break;
 	}
 
 	printk(KERN_INFO "MPD_init: driver start: %s (exit) ===================\n", MPD_driver_name );
@@ -525,7 +584,7 @@ module_init( MPD_init );
 static void __exit
 MPD_exit(void)
 {
-	printk(KERN_INFO "MPD_exit: driver shutdown: %s (enter) ===============\n", MPD_driver_name );
+	printk( KERN_INFO "MPD_exit: driver shutdown: %s (enter) ===============\n", MPD_driver_name );
 	pci_unregister_driver(
 		&MPD_pci_driver_struct );
 	device_destroy(
@@ -538,7 +597,8 @@ MPD_exit(void)
 	unregister_chrdev_region(
 		MKDEV( MPD_AdapterBoard.driverMajor, MPD_AdapterBoard.driverMinor ),
 		MPD_AdapterBoard.numDevices );
-	printk(KERN_INFO "MPD_exit: driver shutdown: %s (exit) ================\n", MPD_driver_name );
+	atomic_dec( &MPD_OpenCount );
+	printk( KERN_INFO "MPD_exit: driver shutdown: %s (exit) ================\n", MPD_driver_name );
 }
 module_exit( MPD_exit );
 
