@@ -8,11 +8,11 @@
 #include <sys/wait.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <sys/time.h>
+#include <time.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 
-// remeber:
+// remember:
 //
 // in 64-bit linux systems a long is a 64-bit type (sizeof(long)=8) !
 
@@ -20,7 +20,18 @@
 //#define USE_READ_WRITE
 //#define PRINTOUT_64K
 
-#define BAR_USAGE	( 0 )	/* default index of bar to use for test */
+#define BAR_USAGE	( 2 )	/* default index of bar to use for test */
+
+// ----------------------------------------------------------
+// JSC 2017-03-06
+// ----------------------------------------------------------
+#define	TEST_SIZE_IN_MB	( 768 )
+
+// ----------------------------------------------------------
+// JSC 2017-03-04
+// I need this offset because I have modules running modifying constantly the first 128 bytes
+// ----------------------------------------------------------
+#define OFFSET		( 0 )
 
 enum MPD_IOCTLS_tag
 {
@@ -36,8 +47,10 @@ int main()
 	int fileHandle = -1;
 	void *bufferSrc = NULL;
 	void *bufferDst = NULL;
+	unsigned char *bufferSrc2 = NULL;
+	unsigned char *bufferDst2 = NULL;
 	void *bufferDev = NULL;
-	unsigned long sizeTest = 1 * 1024 * 1024;
+	unsigned long sizeTest = TEST_SIZE_IN_MB * 1024 * 1024;
 	unsigned long humanReadableSize = sizeTest;
 	unsigned long ii, jj;
 	unsigned long rv;
@@ -45,6 +58,8 @@ int main()
 	unsigned long *p;
 	unsigned char *c;
 	unsigned char u = ' ';	// Unit
+	clock_t startTime, endTime;
+	double finalTime;
 
 	printf( "* open file\n" );
 	fileHandle = open( "/dev/minipci0", O_RDWR );
@@ -109,33 +124,47 @@ printf("<return>\n");getchar();
 	}
 printf("<return>\n");getchar();
 	printf( "* write hardware\n" );
+	startTime = clock();
 	memcpy( bufferDev, bufferSrc, sizeTest );
+	endTime = clock();
+	finalTime = ( double ) ( endTime - startTime ) / CLOCKS_PER_SEC;
+	printf( "Time: %.2lfsec., %.lfMB/s\n", finalTime, ( double ) TEST_SIZE_IN_MB / finalTime );	// hmmm: ~16MB/s
 
 printf("<return>\n");getchar();
+	startTime = clock();
 	printf( "* read hardware\n" );
 	memcpy( bufferDst, bufferDev, sizeTest );
+	endTime = clock();
+	finalTime = ( double ) ( endTime - startTime ) / CLOCKS_PER_SEC;
+	printf( "Time: %.2lfsec., %.lfMB/s\n", finalTime, ( double ) TEST_SIZE_IN_MB / finalTime );
 
 printf("<return>\n");getchar();
 #endif
 
 #ifdef USE_READ_WRITE
 	printf( "* write hardware\n" );
+	startTime = clock();
         rc = write( fileHandle, bufferSrc, sizeTest );
-	printf( "  - rc = %d (should be zero)\n", rc );		// hmmm: ~16MB/s
+	endTime = clock();
+	finalTime = endTime - startTime;
+	printf( "  - rc = %d (should be zero) ==> %.2lf\n", rc, ( double )( finalTime ) / CLOCKS_PER_SEC;		// hmmm: ~16MB/s
 
 	printf( "* read hardware\n" );
         rc = read( fileHandle, bufferDst, sizeTest );		// hmmm: ~1MB/s
 	printf( "  - rc = %d (should be zero)\n", rc );
 #endif
 	printf( "* compare data\n" );
-	rc = memcmp( bufferSrc, bufferDst, sizeTest );
+	bufferSrc2 = ( unsigned char * )bufferSrc;
+	bufferDst2 = ( unsigned char * )bufferDst;
+	rc = memcmp( &bufferSrc2[ OFFSET ], &bufferDst2[ OFFSET ], sizeTest - OFFSET );
+	
 	if ( 0 != rc )
 	{
 		printf( "  - rc = %d (this is an error! should be zero)\n", rc );
 	}
 	else
 	{
-		printf( "  - success!!\n", rc );
+		printf( "  - success!!\n" );
 	}
 
 

@@ -266,7 +266,7 @@ struct file_operations MPD_fops =
 };
 
 static irqreturn_t
-MPD_IrqHandler(
+MPD_IrqHandler(	// <<< work in progress
 	int irq,
 	void *devID )
 {
@@ -287,6 +287,8 @@ MPD_probe(
 	unsigned long i;
 	unsigned long mmioStart;
 	unsigned long mmioLen;
+	unsigned long lenGBInt;
+	unsigned long lenGBFrac;
 	unsigned long barMask = 0;	// all valid BARs get an one-bit here
 	unsigned long maxBARs = 0;	// number of valid identified BARs
 	unsigned long maxBARIndex = 0;	// index of highest valid BAR index
@@ -308,8 +310,13 @@ MPD_probe(
 		MPD_AdapterBoard.bars[ i ].barValid = 0;
 		mmioStart = pci_resource_start( pdev, i );
 		mmioLen   = pci_resource_len( pdev, i );
+
+		// get decimal and fraction (3 digits) of GB-size
+		lenGBFrac = (( mmioLen >> 20 ) & ( 1024 - 1 )) * 1000 / 1024;
+		lenGBInt  = ( mmioLen >> 30 );
+
 		printk( "Start: [0x%8.8lx] %lu\n", mmioStart, mmioStart );
-		printk( "Len:   [0x%8.8lx] %lu\n", mmioLen, mmioLen );
+		printk( "Len:   [0x%8.8lx] %lu (%luMB, %lu.%3.3luGB)\n", mmioLen, mmioLen, mmioLen >> 20, lenGBInt, lenGBFrac );
 		MPD_AdapterBoard.bars[ i ].barHWAddress = pci_iomap( pdev, i, mmioLen );
 		MPD_AdapterBoard.bars[ i ].mmioStart = mmioStart;
 		MPD_AdapterBoard.bars[ i ].barSizeInBytes = mmioLen;
@@ -334,11 +341,11 @@ MPD_probe(
 		printk(KERN_WARNING "MPD_probe: driver init: Cannot reserve all memory regions\n" );
 	}
 
-#if 1
 	// get interrupt number
 	MPD_AdapterBoard.irq = pdev->irq;
 	printk( KERN_INFO "MPD_probe: driver init: irq number = %d\n", MPD_AdapterBoard.irq );
 
+#if 0
 	// enable IRQ
 	err = request_irq(
 		MPD_AdapterBoard.irq,
@@ -358,7 +365,7 @@ MPD_probe(
 	printk( KERN_INFO "MPD_probe: driver init: %s (exit) ===================\n", MPD_driver_name );
 	if ( err != 0 )
 	{
-		printk(KERN_WARNING "MPD_probe: driver init: Error: %d _ DRIVER NOT LOADED!\n", err );
+		printk(KERN_WARNING "MPD_probe: driver init: Error: %d _ DRIVER probably NOT LOADED!\n", err );
 	}
 	return err;
 }
