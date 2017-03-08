@@ -2,7 +2,7 @@
 
 ## commands
 ```
-[prompt]# modinfo <module name>
+[prompt]# modinfo <module name>.ko
 ```
 Shows all info about the module
 ```
@@ -21,6 +21,16 @@ List all pci components including config area
 ```
 
 Shows last kernel messages, updates immediately
+
+```
+[prompt]# insmod <module name>.ko
+```
+Loads driver module
+
+```
+[prompt]# rmmod <module name>.ko
+```
+Unload driver module
 
 ```
 [prompt]#
